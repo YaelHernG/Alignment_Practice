@@ -1,0 +1,503 @@
+---
+title: "Alignment Practice"
+author: "Paola Albarrán Godoy, Ariadna Badia Zamudio, Yael Daniel Hernandez Gonzalez"
+date: "`r Sys.Date()`"
+output: 
+  html_document: # El output controla los parámetros de salida del renderizado
+    collapsed: false            # Contraer celdas de salida
+    code_folding: show          # Mostrar el código
+    toc: true                   # Mostrar la tabla de contenidos
+    toc_depth: 4                # Niveles de títulos que se mostrarán
+    toc_float: true             # Índices o contenidos flotantes
+    smooth_scroll: true         # Activar el scroll
+    highlight: kate             # Destacar
+    df_print: paged             # Mostrar los dataframes en páginas
+    number_sections: true       # Numeración de contenidos
+    theme: flatly 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Alignment of the FNR ChIP-seq
+
+## Generate the reference genome index
+
+First copy the files "Escherichia_coli_K12_MG1655.fasta" and "SRX189773_FNR_ChIP.fastq" to your personal folder and create a new folder for this practice for later use.
+
+```         
+cp /mnt/atgc-d1/bioinfoII/data/alignment/Escherichia_coli_K12_MG1655.fasta .
+
+cp /mnt/atgc-d1/bioinfoII/data/alignment/SRX189773_FNR_ChIP.fastq .
+```
+
+We load the bwa program with :
+
+```         
+module load bwa/0.7.15
+```
+
+BWA is used to perform the alignment and indexing of the reference genome, which will make it easier to align the experiment with the reference genome by forming the k-mers.
+
+Index the reference genome of Escherichia coli that is in the fasta file.
+
+```         
+bwa index Escherichia_coli_K12_MG1655.fasta
+```
+
+Now we have indexed the reference genome that we will use to generate the alignment of the read of the experiment.
+
+## Alignment
+
+To align the reads with the previously indexed reference genome we use the following command:
+
+```         
+bwa mem Escherichia_coli_K12_MG1655.fasta SRX189773_FNR_ChIP.fastq > SRX189773_FNR_ChIP.sam
+```
+
+bwa mem use the MEM algorithm from BWA. This generate a sam file. The next step is convert the sam file to a sorted bam file.
+
+We load samtools for this step
+
+```         
+module load samtools/1.10
+samtools view -bS SRX189773_FNR_ChIP.sam | samtools sort -o SRX189773_FNR_ChIP.sorted.bam
+```
+
+The last command is used to process a sequence alignment file in SAM format and convert it into a sorted BAM file.
+
+The options
+
+-b : This option tells samtools view that the output should be in BAM (binary) format instead of SAM (text).
+
+-S : This option indicates that the input file is in SAM format.
+
+Thus, in this command we generate a pipe that receive the bam file in standart output from the first part. In this second part it sort the bam file.
+
+The options
+
+-o : Specifies the name of the output file
+
+Then we create an index file for the sorted BAM file. Necessary to quickly access specific regions of the BAM file without having to read the entire file from the beginning. The command is:
+
+```         
+samtools index SRX189773_FNR_ChIP.sorted.bam
+```
+
+## Stats
+
+We generate alignment quality control statistics as well as graphs. These statistics are based on the SAM/BAM flags, which are numeric fields indicating properties of each lineup. It useful for this reasons:
+
+-   Data quality control.
+
+-   Understand the nature of the data (single-end vs. paired-end).
+
+-   Identify problems such as unmapped reads or duplicates.
+
+-   Validate the alignment process.
+
+```         
+samtools flagstat SRX189773_FNR_ChIP.sorted.bam
+```
+
+| Stats                                                    |
+|----------------------------------------------------------|
+| 3603544 + 0 in total (QC-passed reads + QC-failed reads) |
+| 0 + 0 secondary                                          |
+| 0 + 0 supplementary                                      |
+| 0 + 0 duplicates                                         |
+| 2351799 + 0 mapped (65.26% : N/A)                        |
+| 0 + 0 paired in sequencing                               |
+| 0 + 0 read1                                              |
+| 0 + 0 read2                                              |
+| 0 + 0 properly paired (N/A : N/A)                        |
+| 0 + 0 with itself and mate mapped                        |
+| 0 + 0 singletons (N/A : N/A)                             |
+| 0 + 0 with mate mapped to a different chr                |
+| 0 + 0 with mate mapped to a different chr (mapQ\>=5)     |
+
+This stats indicates that data are single-end, with 65.26% of reads mapped and no duplicates.
+
+To generate the graphs for quality analysis of the FNR-ChIP-seq experiment aligned against a reference genome, the following additional commands were performed.
+
+```         
+samtools stats -r Escherichia_coli_K12_MG1655.fasta SRX189773_FNR_ChIP.sorted.bam > SRX189773_FNR_ChIP.stats
+```
+
+samtools stats generates detailed statistics on the alignment of the readings in a BAM file. where :
+
+-r : Specifies the reference genome used for alignment.
+
+and then we generate the plot with this command
+
+```         
+plot-bamstats -p SRX189773_FNR_ChIP.graphs/ SRX189773_FNR_ChIP.stats
+```
+
+plot-bamstats takes the .stats file generated by samtools stats and produces a series of plots to visualize the quality and composition of the alignment data. Where:
+
+-p: Specifies the output prefix for the generated graphs
+
+This graphs we load our local repository for visualization (This step it's outside of the cluster)
+
+```         
+sync -chavzP \--stats yhernandezg\@dna.lavis.unam.mx:/mnt/atgc-d1/bioinfoII/yhernandezg/AlignmentPractical/SRX189773_FNR_ChIP.graphs /home/yael/2025-2/Bioinformatica/Alignment Practice
+```
+
+![](images/acgt-cycles.png){width="555"}
+
+This graph shows the frequency of bases (A, C, G, T) in each sequencing run. The expected distribution of bases in a ChIP-seq sequencing is approximately uniform.
+
+The oscillation in bases could indicate some bias in the sequencing cycle, which is common in Illumina data and ChIP-seq experiments. The overall trend seems acceptable
+
+![](images/gc-content.png){width="559"}
+
+The plot seems reasonable. A peak around 54% suggests that the GC content of the captured sequences is relatively homogeneous, which is consistent with the genomic composition of Escherichia coli. If there were a more dispersed distribution or additional peaks, it could indicate contamination or biases in the capture.
+
+![](images/mism-per-cycle.png)
+
+This graph shows the number of alignment errors per sequencing cycle.
+
+There is a peak of errors in the first few cycles and another at the end. This is expected in Illumina sequencing, as errors tend to accumulate at the ends of the reads.
+
+The presence of many 'N' bases at the beginning and end suggests that the quality in these regions is low.
+
+If the mismatches were to increase dramatically in intermediate cycles, it could be a problem in data quality or alignment.
+
+![](images/quals2.png)
+
+This graph shows the average quality of the bases in each cycle.
+
+In general, the quality remains high (\~30-40) throughout most of the read cycle, which is good.
+
+The drop in the last few cycles is normal and is usually seen in Illumina, especially on long reads.
+
+**Conclusion**
+
+The alignment of E. coli ChIP-seq data using BWA and subsequent quality assessment with Samtools indicate a high percentage of properly paired reads. The quality scores per cycle and mismatch rates suggest a well-processed dataset suitable for downstream analysis. However, potential biases in sequencing depth or alignment quality should be further investigated using peak-calling methods.
+
+# Alignment of the mouse ChIP-seq
+
+## Analyze the quality of readings with FastQC
+
+First copy the files "mus_musculus_CEBPA_liver_ERR005132.fastq.gz" to your personal folder and create a new folder for this practice for later use.
+
+```         
+cp /mnt/atgc-d1/bioinfoII/data/alignment/mus_musculus_CEBPA_liver_ERR005132.fastq.gz .
+```
+
+To examine the quality with fastqc we need to load the program with this command:
+
+```         
+module load fastqc/0.12.1
+fastqc mus_musculus_CEBPA_liver_ERR005132.fastq.gz -o fastqc_reports/
+```
+
+The last command realize de fastqc from the file.The output is the next html
+
+[See report FastQC](mus_musculus_CEBPA_liver_ERR005132_fastqc.html)
+
+In summary:
+
+-   Total number of sequences: 17,171,130.
+
+-   Total bases: 721.1 Mbp
+
+-   Sequence length: 42 bp
+
+-   %GC: 45%
+
+-   Sequences marked as low quality: 0
+
+**Quality per base:**
+
+The quality of each sequence position was evaluated.
+
+There is no explicit information on whether the quality is good or low, but if there are no caveats, it means that the quality is acceptable in most bases.
+
+**Quality per tile:**
+
+Evaluates whether there are regions in the sequencing with lower quality.
+
+No specific anomalies are mentioned in the report.
+
+**Quality per sequence:**
+
+Overall assessment of the quality of each read.
+
+If most sequences have good quality, this is positive.
+
+**Content per base:**
+
+The proportion of A, T, C and G nucleotides at each position is analyzed.
+
+No significant biases are reported.
+
+**GC content by sequence:**
+
+We evaluate whether there is an anomalous distribution of GC content.
+
+The %GC is 45%, within the expected range for mammalian samples.
+
+**'N' base content:**
+
+No problems with 'N' bases in the sequences are reported.
+
+**Sequence length distribution:**
+
+All sequences are 42 bp in length, indicating that the data are consistent.
+
+**Sequence duplication levels:**
+
+There is no mention of whether there are problems with duplications, which is positive.
+
+**Over-represented sequences:**
+
+No over-represented sequences were detected, indicating no contaminants or artifacts.
+
+**Adapter content:**
+
+No mention of the presence of excess adapters
+
+## Trimming
+
+An alignment was performed prior to this step, and we found that the percentage of sequence mapping with the reads of the file "mus_musculus_CEBPA_liver_ERR005132.fastq.gz" was 18%.
+
+So we cleaned up the data in the file, using trimmomatic. A job was sent. With the following structure:
+
+```         
+#!/bin/bash
+# Use current working directory
+#$ -cwd
+#
+# Join stdout and stderr
+#$ -j y
+#
+# Run job through bash shell
+#$ -S /bin/bash
+#
+#You can edit the scriptsince this line
+#
+# Your job name
+#$ -N Trimming_Yael
+#
+# Send an email after the job has finished
+#$ -m e
+#$ -M yaelhgs@gmail.com
+#
+# If modules are needed, source modules environment (Do not delete the next line):
+. /etc/profile.d/modules.sh
+#
+# Add any modules you might require:
+module load trimmomatic/0.39
+
+#
+# Write your commands in the next line
+cd /mnt/atgc-d1/bioinfoII/yhernandezg/AlignmentPractical/mouse_alignment/trimming_alignment/
+
+wget https://raw.githubusercontent.com/timflutre/trimmomatic/refs/heads/master/adapters/TruSeq3-SE.fa
+
+trimmomatic SE -threads 4 mus_musculus_CEBPA_liver_ERR005132.fastq.gz mus_musculus_CEBPA_liver_ERR005132_trimmed.fastq ILLUMINACLIP:/mnt/atgc-d1/bioinfoII/yhernandezg/AlignmentPractical/mouse_alignment/trimming_alignment/TruSeq3-SE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+```
+
+The trimmomatic program was loaded in its version 0.39 with "module load trimmomatic/0.39", the absolute path where the files that performed the last two commands were to be stored was set to "cd /mnt/atgc-d1/bioinfoII/yhernandezg/AlignmentPractical/mouse_alignment/trimming_alignment/". The online material was retrieved from the repository where the ILLUMINA adapters for single end are located.
+
+Finally the trimmomatic command is executed where:
+
+-   SE → Indicates that the data is Single-End.
+
+-   -threads 4 → Uses 4 threads to process the data in parallel, which speeds up the trimming.
+
+-   ILLUMINACLIP:/path/TruSeq3-SE.fa → Uses the TruSeq3-SE.fa file containing Illumina adapter sequences to trim them if present in reads.
+
+-   2 → Mismatches allowed between the adapter and the actual sequence.
+
+-   30 → Quality threshold (Phred score) to cut adapters.
+
+-   10 → Minimum number of matched bases for an adapter to be detected and removed.
+
+-   LEADING:3 → Removes bases at the start of the read if they have a quality less than 3.
+
+-   TRAILING:3 → Removes bases at the end of the read if they have a quality less than 3.
+
+-   SLIDINGWINDOW:4:15
+
+    -   4-base window → Evaluates the average quality in each group of 4 consecutive bases.
+
+    -   Threshold 15 → If the average quality in a window is less than 15, cuts the reading from there.
+
+-   MINLEN:36 → Discards any read with less than 36 bases after trimming.
+
+We did again the quality analysis of the trimmed reads, with the help of fastqc, and ran again the same command described in step 1 of this alignment. The output for quality is as follows:
+
+[See report FastQC](mus_musculus_CEBPA_liver_ERR005132_trimmed_fastqc.html)
+
+In summary:
+
+**Total number of sequences:** 1,133,528.
+
+**Total bases:** 44.3 Mbp.
+
+**Sequence length:** 36-42 bp.
+
+**%GC:** 35%.
+
+**Sequences marked as low quality:** 0.
+
+**Quality per base:**
+
+The quality of each sequence position was evaluated.\
+The majority of bases have acceptable quality, but there is a slight drop in quality towards the end of the reads, which is common in high-throughput sequencing.
+
+**Quality per tile:**
+
+Evaluates whether there are regions in the sequencing with lower quality.\
+No specific anomalies were detected in the sequencing tiles.
+
+**Quality per sequence:**
+
+Overall assessment of the quality of each read.\
+Most sequences have a good average quality, which is a positive indicator.
+
+**Content per base:**
+
+The proportion of A, T, C, and G nucleotides at each position was analyzed.\
+Some bias in nucleotide composition is observed at the beginning of the reads, which is common in ChIP-seq data but should be monitored.
+
+**GC content by sequence:**
+
+Evaluates whether there is an anomalous distribution of GC content.\
+The %GC is 35%, which is within the expected range for mouse samples, though slightly lower than the genome-wide average.
+
+**'N' base content:**
+
+No significant issues with 'N' bases were detected in the sequences.
+
+**Sequence length distribution:**
+
+The sequences range from 36 to 42 bp in length, indicating that some reads were trimmed due to low quality or adapter contamination.
+
+**Sequence duplication levels:**
+
+Some level of duplication is present, which is expected for ChIP-seq experiments. If duplication levels are too high, further filtering may be needed.
+
+**Over-represented sequences:**
+
+No strongly over-represented sequences were detected, suggesting no major contamination or amplification bias.
+
+**Adapter content:**
+
+Adapter sequences were successfully removed in most cases, but a minimal presence of residual adapters is still observed, which may require additional filtering if necessary.
+
+## Alignment
+
+For this process we first scanned the folder where the indexed mouse reference genome file was stored. In the end, the file was in the following path.
+
+```         
+/mnt/Archives/genome/mouse/mm10/UCSC/bowtie-0.12.7-index/index
+```
+
+Then, to perform the alignment of the mouse reference genome index with the reads from the previously trimmed ChIP-seq experiment (this is the file `mus_musculus_CEBPA_liver_ERR005132_trimmed.fastq.gz` ) we send the following job:
+
+```         
+#!/bin/bash
+# Use current working directory
+#$ -cwd
+#
+# Join stdout and stderr
+#$ -j y
+#
+# Run job through bash shell
+#$ -S /bin/bash
+#
+#You can edit the scriptsince this line
+#
+# Your job name
+#$ -N Alignment_Trimming_Yael
+#
+# Send an email after the job has finished
+#$ -m e
+#$ -M yaelhgs@gmail.com
+#
+# If modules are needed, source modules environment (Do not delete the next line):
+. /etc/profile.d/modules.sh
+#
+# Add any modules you might require:
+module load bowtie/1.3.1
+module load samtools/1.10
+
+#
+# Write your commands in the next line
+cd /mnt/atgc-d1/bioinfoII/yhernandezg/AlignmentPractical/mouse_alignment/trimming_alignment/
+
+bowtie -S -v 2 -p 8 /mnt/Archives/genome/mouse/mm10/UCSC/bowtie-0.12.7-index/index/mm10 -q mus_musculus_CEBPA_liver_ERR005132_trimmed.fastq > mus_musculus_CEBPA_liver_ERR005132_trimmed.sam
+
+samtools view -bS mus_musculus_CEBPA_liver_ERR005132_trimmed.sam > mus_musculus_CEBPA_liver_ERR005132_trimmed.bam
+
+samtools sort mus_musculus_CEBPA_liver_ERR005132_trimmed.bam -o mus_musculus_CEBPA_liver_ERR005132_trimmed.sorted.bam
+
+samtools index mus_musculus_CEBPA_liver_ERR005132_trimmed.sorted.bam
+```
+
+First the programs bowtie in its version 1.3.1 and samtools in its version 1.10 were loaded for later use. The path where the output files of each of the following commands were going to be loaded was addressed
+
+The alignment was performed with bowtie with the following command:
+
+```         
+bowtie -S -v 2 -p 8 /mnt/Archives/genome/mouse/mm10/UCSC/bowtie-0.12.7-index/index/mm10 -q mus_musculus_CEBPA_liver_ERR005132_trimmed.fastq > mus_musculus_CEBPA_liver_ERR005132_trimmed.sam
+```
+
+Where:
+
+-S → Generates the output in SAM (Sequence Alignment Map) format.
+
+-v 2 → Allows up to 2 mismatches per read in the alignment.
+
+-p 8 → Use 8 threads to parallelize the processing and make it faster.
+
+Then the sam file was changed to bam with the command:
+
+```         
+samtools view -bS mus_musculus_CEBPA_liver_ERR005132_trimmed.sam > mus_musculus_CEBPA_liver_ERR005132_trimmed.bam
+```
+
+Where: -b → Converts the output to BAM format. -S → Indicates that the input file is SAM.
+
+After that we must sort and index the bam file, this is done with the following commands
+
+```         
+samtools sort mus_musculus_CEBPA_liver_ERR005132_trimmed.bam -o mus_musculus_CEBPA_liver_ERR005132_trimmed.sorted.bam
+
+samtools index mus_musculus_CEBPA_liver_ERR005132_trimmed.sorted.bam
+```
+
+## Stats
+
+For this alignment we generate descriptive statistics of the mapping process. With the following command:
+
+```         
+samtools flagstat mus_musculus_CEBPA_liver_ERR005132_trimmed.sorted.bam
+```
+
+| Stats                                                    |
+|----------------------------------------------------------|
+| 1133528 + 0 in total (QC-passed reads + QC-failed reads) |
+| 0 + 0 secondary                                          |
+| 0 + 0 supplementary                                      |
+| 0 + 0 duplicates                                         |
+| 884832 + 0 mapped (78.06% : N/A)                         |
+| 0 + 0 paired in sequencing                               |
+| 0 + 0 read1                                              |
+| 0 + 0 read2                                              |
+| 0 + 0 properly paired (N/A : N/A)                        |
+| 0 + 0 with itself and mate mapped                        |
+| 0 + 0 singletons (N/A : N/A)                             |
+| 0 + 0 with mate mapped to a different chr                |
+| 0 + 0 with mate mapped to a different chr (mapQ\>=5)     |
+
+This stats indicates that data are single-end, with 78.06% of reads mapped and no duplicates.
+
+**Conclusion**
+
+The mouse ChIP-seq dataset underwent trimming using Trimmomatic to remove low-quality bases and adapter contamination. The processed reads were then aligned using Bowtie, and Samtools was used for quality assessment. The proportion of mapped reads was significantly high, and quality metrics indicated that the dataset is of good quality for further analysis.
